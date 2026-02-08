@@ -4,6 +4,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.feeds import fetch_all_feeds
 from app.analyzer import analyze_pending_articles, check_ollama_available
+from app.email_summary import send_email_summary
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,20 @@ async def scheduled_analyze():
         logger.error(f"Scheduled analysis failed: {e}")
 
 
+async def scheduled_email():
+    logger.info("Scheduled email summary starting...")
+    try:
+        result = await send_email_summary()
+        logger.info(f"Scheduled email done: {result}")
+    except Exception as e:
+        logger.error(f"Scheduled email failed: {e}")
+
+
 def start_scheduler(
     fetch_interval_minutes: int = 15,
     analyze_interval_minutes: int = 5,
+    email_interval_hours: int = 3,
 ):
-    """Start the background scheduler for periodic feed fetching and analysis."""
     scheduler.add_job(
         scheduled_fetch,
         trigger=IntervalTrigger(minutes=fetch_interval_minutes),
@@ -54,10 +64,19 @@ def start_scheduler(
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        scheduled_email,
+        trigger=IntervalTrigger(hours=email_interval_hours),
+        id="email_summary",
+        name="Send email summary",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         f"Scheduler started: feeds every {fetch_interval_minutes}min, "
-        f"analysis every {analyze_interval_minutes}min"
+        f"analysis every {analyze_interval_minutes}min, "
+        f"email every {email_interval_hours}h"
     )
 
 
