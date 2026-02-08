@@ -1,6 +1,6 @@
 import aiosqlite
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "news.db")
 
@@ -186,19 +186,29 @@ async def get_sources() -> list[str]:
         return [row["source"] for row in rows]
 
 
-async def get_market_summary() -> dict:
-    """Aggregate analyzed articles into an overall market summary."""
+async def get_market_summary(since_hours: int | None = None) -> dict:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Get all analyzed articles, ordered by impact score
-        rows = await db.execute_fetchall(
-            """SELECT title, url, source, impact_level, impact_score,
-                      impact_summary, affected_sectors, market_direction, published_at
-               FROM articles
-               WHERE impact_level != 'unanalyzed' AND impact_level IS NOT NULL
-               ORDER BY impact_score DESC"""
-        )
+        if since_hours:
+            since = (datetime.utcnow() - timedelta(hours=since_hours)).isoformat()
+            rows = await db.execute_fetchall(
+                """SELECT title, url, source, impact_level, impact_score,
+                          impact_summary, affected_sectors, market_direction, published_at
+                   FROM articles
+                   WHERE impact_level != 'unanalyzed' AND impact_level IS NOT NULL
+                     AND analyzed_at > ?
+                   ORDER BY impact_score DESC""",
+                (since,),
+            )
+        else:
+            rows = await db.execute_fetchall(
+                """SELECT title, url, source, impact_level, impact_score,
+                          impact_summary, affected_sectors, market_direction, published_at
+                   FROM articles
+                   WHERE impact_level != 'unanalyzed' AND impact_level IS NOT NULL
+                   ORDER BY impact_score DESC"""
+            )
         analyzed = [dict(r) for r in rows]
 
         if not analyzed:

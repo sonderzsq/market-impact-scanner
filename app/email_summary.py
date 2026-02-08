@@ -17,7 +17,7 @@ DIRECTION_COLORS = {"bullish": "#26a69a", "bearish": "#ef5350", "mixed": "#ffa72
 IMPACT_COLORS = {"high": "#ef5350", "medium": "#ffa726", "low": "#ffee58", "none": "#545b67"}
 
 
-def _build_email_html(data: dict) -> str:
+def _build_email_html(data: dict, title: str = "Market Summary") -> str:
     overall = data.get("overall_direction", "neutral")
     arrow = DIRECTION_ARROWS.get(overall, "—")
     color = DIRECTION_COLORS.get(overall, "#8a919e")
@@ -79,7 +79,7 @@ def _build_email_html(data: dict) -> str:
     <div style="background:#0a0e17;color:#e1e4ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:0;margin:0;">
         <div style="max-width:640px;margin:0 auto;padding:20px;">
             <div style="text-align:center;padding:20px 0;border-bottom:1px solid #1e2636;">
-                <h1 style="margin:0;font-size:22px;color:#e1e4ea;">MIS<span style="color:#26a69a;">.</span> Market Summary</h1>
+                <h1 style="margin:0;font-size:22px;color:#e1e4ea;">MIS<span style="color:#26a69a;">.</span> {title}</h1>
                 <p style="margin:6px 0 0;font-size:12px;color:#545b67;">{now}</p>
             </div>
 
@@ -169,4 +169,40 @@ async def send_email_summary() -> dict:
         return {"status": "sent", "id": result.get("id", "")}
     except Exception as e:
         logger.error(f"Failed to send email summary: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+async def send_daily_digest() -> dict:
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not set, skipping daily digest")
+        return {"status": "skipped", "reason": "no API key"}
+    if not EMAIL_TO:
+        logger.warning("EMAIL_TO not set, skipping daily digest")
+        return {"status": "skipped", "reason": "no recipient"}
+
+    resend.api_key = RESEND_API_KEY
+    data = await get_market_summary(since_hours=24)
+
+    if data.get("total_analyzed", 0) == 0:
+        logger.info("No articles in last 24h, skipping daily digest")
+        return {"status": "skipped", "reason": "no data in last 24h"}
+
+    overall = data.get("overall_direction", "neutral").upper()
+    arrow = DIRECTION_ARROWS.get(data.get("overall_direction", "neutral"), "—")
+    today = datetime.utcnow().strftime("%b %d, %Y")
+    subject = f"{arrow} Daily Digest — Market {overall} | {data['total_analyzed']} articles | {today}"
+
+    html = _build_email_html(data, title="Daily Digest — Past 24 Hours")
+
+    try:
+        result = resend.Emails.send({
+            "from": EMAIL_FROM,
+            "to": [addr.strip() for addr in EMAIL_TO.split(",")],
+            "subject": subject,
+            "html": html,
+        })
+        logger.info(f"Sent daily digest to {EMAIL_TO}")
+        return {"status": "sent", "id": result.get("id", "")}
+    except Exception as e:
+        logger.error(f"Failed to send daily digest: {e}")
         return {"status": "error", "error": str(e)}

@@ -1,10 +1,11 @@
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 from app.feeds import fetch_all_feeds
 from app.analyzer import analyze_pending_articles, check_ollama_available
-from app.email_summary import send_email_summary
+from app.email_summary import send_email_summary, send_daily_digest
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,16 @@ async def scheduled_email():
         logger.error(f"Scheduled email failed: {e}")
 
 
+async def scheduled_daily_digest():
+    """Daily 10am EST digest — past 24 hours summary."""
+    logger.info("Scheduled daily digest starting...")
+    try:
+        result = await send_daily_digest()
+        logger.info(f"Scheduled daily digest done: {result}")
+    except Exception as e:
+        logger.error(f"Scheduled daily digest failed: {e}")
+
+
 def start_scheduler(
     fetch_interval_minutes: int = 15,
     analyze_interval_minutes: int = 5,
@@ -72,11 +83,20 @@ def start_scheduler(
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        scheduled_daily_digest,
+        trigger=CronTrigger(hour=15, minute=0),  # 10am EST = 15:00 UTC
+        id="daily_digest",
+        name="Daily morning digest email (10am EST)",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         f"Scheduler started: feeds every {fetch_interval_minutes}min, "
         f"analysis every {analyze_interval_minutes}min, "
-        f"email every {email_interval_hours}h"
+        f"email every {email_interval_hours}h, "
+        f"daily digest at 10am EST (15:00 UTC)"
     )
 
 

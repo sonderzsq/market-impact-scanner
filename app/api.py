@@ -5,7 +5,7 @@ from app.database import get_articles, get_article_count, get_sources, get_marke
 from app.feeds import fetch_all_feeds, RSS_FEEDS
 from app.analyzer import analyze_pending_articles, check_ollama_available
 from app.discord_bot import send_summary_now
-from app.email_summary import send_email_summary
+from app.email_summary import send_email_summary, send_daily_digest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -76,6 +76,13 @@ async def trigger_discord_summary():
 @router.post("/email-summary")
 async def trigger_email_summary():
     result = await send_email_summary()
+    return result
+
+
+@router.post("/daily-digest")
+async def trigger_daily_digest():
+    """Manually trigger the daily 24-hour digest email."""
+    result = await send_daily_digest()
     return result
 
 
