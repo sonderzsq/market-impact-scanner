@@ -1,0 +1,8 @@
+.env
+news.db
+venv/
+__pycache__/
+*.pyc
+server.log
+screenshot.png
+*.png

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Impact Scanner</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar-left">
+            <h1 class="logo">MIS<span class="logo-dot">.</span></h1>
+            <span class="logo-text">Market Impact Scanner</span>
+        </div>
+        <div class="top-bar-stats" id="stats-bar">
+            <div class="stat-item">
+                <span class="stat-value" id="stat-total">--</span>
+                <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item stat-high">
+                <span class="stat-value" id="stat-high">--</span>
+                <span class="stat-label">High</span>
+            </div>
+            <div class="stat-item stat-medium">
+                <span class="stat-value" id="stat-medium">--</span>
+                <span class="stat-label">Medium</span>
+            </div>
+            <div class="stat-item stat-low">
+                <span class="stat-value" id="stat-low">--</span>
+                <span class="stat-label">Low</span>
+            </div>
+        </div>
+        <div class="top-bar-right">
+            <span class="last-refresh" id="last-refresh">--</span>
+        </div>
+    </header>
+
+    <nav class="tab-bar">
+        <button class="tab active" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="sectors">Sectors</button>
+    </nav>
+
+    <div id="tab-overview" class="tab-content active">
+        <div class="controls">
+            <div class="filters">
+                <select id="filter-impact" class="control-select">
+                    <option value="all">All Impact Levels</option>
+                    <option value="high">High Impact</option>
+                    <option value="medium">Medium Impact</option>
+                    <option value="low">Low Impact</option>
+                    <option value="none">No Impact</option>
+                    <option value="unanalyzed">Unanalyzed</option>
+                </select>
+                <select id="filter-source" class="control-select">
+                    <option value="all">All Sources</option>
+                </select>
+                <select id="sort-by" class="control-select">
+                    <option value="published_at">Sort: Date</option>
+                    <option value="impact_score">Sort: Impact Score</option>
+                    <option value="source">Sort: Source</option>
+                </select>
+                <select id="sort-order" class="control-select">
+                    <option value="DESC">Newest First</option>
+                    <option value="ASC">Oldest First</option>
+                </select>
+            </div>
+            <div class="actions">
+                <button id="btn-fetch" class="btn btn-primary">
+                    <span class="btn-icon">&#8635;</span> Refresh Feeds
+                </button>
+                <button id="btn-analyze" class="btn btn-accent">
+                    <span class="btn-icon">&#9881;</span> Analyze
+                </button>
+            </div>
+        </div>
+
+        <div id="status-bar" class="status-bar hidden"></div>
+
+        <div class="market-summary" id="market-summary">
+            <div class="ms-header">
+                <div class="ms-direction-block">
+                    <span class="ms-direction-arrow" id="ms-direction-arrow"></span>
+                    <div class="ms-direction-text">
+                        <span class="ms-direction-label" id="ms-direction-label">--</span>
+                        <span class="ms-direction-sub">Overall Market Sentiment</span>
+                    </div>
+                </div>
+                <div class="ms-stats-row">
+                    <div class="ms-stat">
+                        <span class="ms-stat-value" id="ms-total-analyzed">--</span>
+                        <span class="ms-stat-label">Analyzed</span>
+                    </div>
+                    <div class="ms-stat">
+                        <span class="ms-stat-value" id="ms-avg-score">--</span>
+                        <span class="ms-stat-label">Avg Score</span>
+                    </div>
+                    <div class="ms-stat ms-bullish">
+                        <span class="ms-stat-value" id="ms-bullish-count">--</span>
+                        <span class="ms-stat-label">Bullish</span>
+                    </div>
+                    <div class="ms-stat ms-bearish">
+                        <span class="ms-stat-value" id="ms-bearish-count">--</span>
+                        <span class="ms-stat-label">Bearish</span>
+                    </div>
+                    <div class="ms-stat ms-neutral-stat">
+                        <span class="ms-stat-value" id="ms-neutral-count">--</span>
+                        <span class="ms-stat-label">Neutral</span>
+                    </div>
+                    <div class="ms-stat ms-mixed">
+                        <span class="ms-stat-value" id="ms-mixed-count">--</span>
+                        <span class="ms-stat-label">Mixed</span>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-body">
+                <div class="ms-drivers">
+                    <h3 class="ms-section-label">Key Drivers</h3>
+                    <div class="ms-drivers-list" id="ms-drivers-list">
+                        <div class="ms-loading">Loading market summary...</div>
+                    </div>
+                </div>
+                <div class="ms-sectors">
+                    <h3 class="ms-section-label">Sector Sentiment</h3>
+                    <div class="ms-sectors-grid" id="ms-sectors-grid">
+                        <div class="ms-loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <main class="articles-grid" id="articles-grid">
+            <div class="loading-state" id="loading-state">
+                <div class="spinner"></div>
+                <p>Loading articles...</p>
+            </div>
+        </main>
+    </div>
+
+    <div id="tab-sectors" class="tab-content">
+        <div class="controls">
+            <div class="sector-btns">
+                <button class="sector-btn sector-btn-tmt active" data-sector="tmt">TMT <span class="sector-btn-count" id="count-tmt">--</span></button>
+                <button class="sector-btn sector-btn-defensive" data-sector="defensive">Defensive <span class="sector-btn-count" id="count-defensive">--</span></button>
+                <button class="sector-btn sector-btn-macro" data-sector="macro">Macro <span class="sector-btn-count" id="count-macro">--</span></button>
+                <button class="sector-btn sector-btn-cyclical" data-sector="cyclical">Cyclical <span class="sector-btn-count" id="count-cyclical">--</span></button>
+            </div>
+            <div class="actions">
+                <button id="btn-fetch-sectors" class="btn btn-primary">
+                    <span class="btn-icon">&#8635;</span> Refresh Feeds
+                </button>
+                <button id="btn-analyze-sectors" class="btn btn-accent">
+                    <span class="btn-icon">&#9881;</span> Analyze
+                </button>
+            </div>
+        </div>
+
+        <div id="sector-status-bar" class="status-bar hidden"></div>
+
+        <div class="sector-impact-columns" id="sector-impact-columns">
+                <div class="sector-impact-col">
+                    <div class="sector-impact-col-header impact-col-high">
+                        <h3>High Impact</h3>
+                        <span class="sector-impact-col-count" id="col-count-high">0</span>
+                    </div>
+                    <div class="sector-impact-col-body" id="col-high"></div>
+                </div>
+                <div class="sector-impact-col">
+                    <div class="sector-impact-col-header impact-col-medium">
+                        <h3>Medium Impact</h3>
+                        <span class="sector-impact-col-count" id="col-count-medium">0</span>
+                    </div>
+                    <div class="sector-impact-col-body" id="col-medium"></div>
+                </div>
+                <div class="sector-impact-col">
+                    <div class="sector-impact-col-header impact-col-low">
+                        <h3>Low Impact</h3>
+                        <span class="sector-impact-col-count" id="col-count-low">0</span>
+                    </div>
+                    <div class="sector-impact-col-body" id="col-low"></div>
+                </div>
+            </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <button class="modal-close" id="modal-close">&times;</button>
+            <div class="modal-header">
+                <div class="modal-impact-row">
+                    <span class="impact-badge" id="modal-impact-badge"></span>
+                    <span class="impact-score" id="modal-impact-score"></span>
+                    <span class="direction-indicator" id="modal-direction"></span>
+                </div>
+                <h2 class="modal-title" id="modal-title"></h2>
+                <div class="modal-meta">
+                    <span class="modal-source" id="modal-source"></span>
+                    <span class="modal-date" id="modal-date"></span>
+                </div>
+            </div>
+            <div class="modal-score-bar">
+                <div class="score-bar-container" style="height:5px;">
+                    <div class="score-bar" id="modal-score-bar"></div>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section">
+                    <h3 class="modal-section-label">Article Summary</h3>
+                    <p class="modal-summary" id="modal-summary"></p>
+                </div>
+                <div class="modal-section" id="modal-analysis-section">
+                    <h3 class="modal-section-label">Market Impact Analysis</h3>
+                    <p class="modal-analysis" id="modal-analysis"></p>
+                </div>
+                <div class="modal-section" id="modal-direction-section">
+                    <h3 class="modal-section-label">Market Direction</h3>
+                    <div class="modal-direction-detail" id="modal-direction-detail"></div>
+                </div>
+                <div class="modal-section" id="modal-sectors-section">
+                    <h3 class="modal-section-label">Affected Sectors</h3>
+                    <div class="modal-sectors" id="modal-sectors"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-primary" id="modal-link" href="#" target="_blank" rel="noopener">Read Original Article</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
