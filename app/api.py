@@ -85,7 +85,7 @@ async def market_summary():
     return await get_market_summary()
 
 
-@router.get("/health")
+@router.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     ollama_ok = check_ollama_available()
     stats = await get_article_count()
