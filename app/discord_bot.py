@@ -145,36 +145,68 @@ async def build_sector_buckets() -> dict[str, list[dict]]:
     return buckets
 
 
+async def _get_high_impact_recent() -> list[dict]:
+    """Fetch only HIGH impact articles analyzed in the past 6 hours."""
+    articles = await get_articles(
+        impact_level="high",
+        sort_by="impact_score",
+        sort_order="DESC",
+        limit=500,
+    )
+    since = datetime.utcnow() - timedelta(hours=6)
+    recent = []
+    for a in articles:
+        analyzed = a.get("analyzed_at") or a.get("published_at")
+        if analyzed:
+            try:
+                if datetime.fromisoformat(analyzed) > since:
+                    recent.append(a)
+            except (ValueError, TypeError):
+                pass
+    return recent
+
+
 async def build_external_summary_embeds() -> list[discord.Embed]:
-    """Build compact all-sector summary embeds for the external channel."""
-    buckets = await build_sector_buckets()
-    stats = await get_article_count()
+    """Build compact high-impact-only summary for the external channel (past 6h)."""
+    pool = await _get_high_impact_recent()
     embeds = []
+
+    # Classify into sector buckets
+    buckets: dict[str, list[dict]] = {s: [] for s in SECTOR_MAP}
+    for article in pool:
+        matched = classify_to_sector(article.get("affected_sectors"))
+        for sector in matched:
+            buckets[sector].append(article)
+
+    total_high = len(pool)
 
     # Header
     header = discord.Embed(
-        title="Market Impact Scanner \u2014 6h Summary",
+        title="Market Impact Scanner \u2014 High Impact (Past 6h)",
         description=(
-            f"**{stats['total']}** total articles | "
-            f"**{stats['high_impact']}** high | "
-            f"**{stats['medium_impact']}** medium | "
-            f"**{stats['low_impact']}** low"
+            f"**{total_high}** high-impact articles across all sectors"
         ),
-        color=0x26A69A,
+        color=0xEF5350,
         timestamp=datetime.utcnow(),
     )
+    if total_high == 0:
+        header.description += "\n\n_No high-impact news in the past 6 hours._"
     embeds.append(header)
 
-    # One embed per sector with links + summaries
+    if total_high == 0:
+        return embeds
+
+    # One embed per sector (only if it has articles)
     for sector_name in ["TMT", "Defensive", "Macroeconomics", "Cyclical"]:
         articles = buckets.get(sector_name, [])
+        if not articles:
+            continue
         top = articles[:5]
         color = SECTOR_COLORS.get(sector_name, 0x545B67)
 
         lines = []
         for i, a in enumerate(top, 1):
             score = a.get("impact_score", 0)
-            level = (a.get("impact_level") or "low").upper()
             direction = a.get("market_direction", "neutral")
             arrow = DIRECTION_ARROWS.get(direction, "\u2014")
             title = a.get("title", "Untitled")
@@ -184,14 +216,14 @@ async def build_external_summary_embeds() -> list[discord.Embed]:
             title_display = title[:70] + "..." if len(title) > 70 else title
             link = f"[{title_display}]({url})" if url else title_display
             summary_display = summary[:120] + "..." if len(summary) > 120 else summary
-            lines.append(f"**{i}.** {arrow} `{level} {score}` {link}\n> {summary_display}")
+            lines.append(f"**{i}.** {arrow} `{score}` {link}\n> {summary_display}")
 
         embed = discord.Embed(
             title=f"{sector_name}",
-            description="\n\n".join(lines) if lines else "_No articles in this sector._",
+            description="\n\n".join(lines),
             color=color,
         )
-        embed.set_footer(text=f"{len(articles)} articles")
+        embed.set_footer(text=f"{len(articles)} high-impact articles")
         embeds.append(embed)
 
     return embeds
