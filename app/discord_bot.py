@@ -24,6 +24,8 @@ SECTOR_CHANNELS = {
     "Cyclical": int(os.getenv("DISCORD_CHANNEL_CYCLICAL", "0")),
 }
 
+EXTERNAL_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_EXTERNAL", "0"))
+
 SECTOR_MAP = {
     "TMT": ["technology", "communications", "media", "telecom"],
     "Defensive": ["healthcare", "utilities", "consumer staples", "consumer"],
@@ -143,6 +145,58 @@ async def build_sector_buckets() -> dict[str, list[dict]]:
     return buckets
 
 
+async def build_external_summary_embeds() -> list[discord.Embed]:
+    """Build compact all-sector summary embeds for the external channel."""
+    buckets = await build_sector_buckets()
+    stats = await get_article_count()
+    embeds = []
+
+    # Header
+    header = discord.Embed(
+        title="Market Impact Scanner \u2014 6h Summary",
+        description=(
+            f"**{stats['total']}** total articles | "
+            f"**{stats['high_impact']}** high | "
+            f"**{stats['medium_impact']}** medium | "
+            f"**{stats['low_impact']}** low"
+        ),
+        color=0x26A69A,
+        timestamp=datetime.utcnow(),
+    )
+    embeds.append(header)
+
+    # One embed per sector with links + summaries
+    for sector_name in ["TMT", "Defensive", "Macroeconomics", "Cyclical"]:
+        articles = buckets.get(sector_name, [])
+        top = articles[:5]
+        color = SECTOR_COLORS.get(sector_name, 0x545B67)
+
+        lines = []
+        for i, a in enumerate(top, 1):
+            score = a.get("impact_score", 0)
+            level = (a.get("impact_level") or "low").upper()
+            direction = a.get("market_direction", "neutral")
+            arrow = DIRECTION_ARROWS.get(direction, "\u2014")
+            title = a.get("title", "Untitled")
+            url = a.get("url", "")
+            summary = a.get("impact_summary", "") or ""
+
+            title_display = title[:70] + "..." if len(title) > 70 else title
+            link = f"[{title_display}]({url})" if url else title_display
+            summary_display = summary[:120] + "..." if len(summary) > 120 else summary
+            lines.append(f"**{i}.** {arrow} `{level} {score}` {link}\n> {summary_display}")
+
+        embed = discord.Embed(
+            title=f"{sector_name}",
+            description="\n\n".join(lines) if lines else "_No articles in this sector._",
+            color=color,
+        )
+        embed.set_footer(text=f"{len(articles)} articles")
+        embeds.append(embed)
+
+    return embeds
+
+
 class MarketBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
@@ -157,6 +211,8 @@ class MarketBot(discord.Client):
         if not self.summary_loop_started:
             self.summary_loop_started = True
             self.send_summary_loop.start()
+            if EXTERNAL_CHANNEL_ID:
+                self.send_external_loop.start()
 
     @tasks.loop(hours=3)
     async def send_summary_loop(self):
@@ -164,6 +220,14 @@ class MarketBot(discord.Client):
 
     @send_summary_loop.before_loop
     async def before_summary(self):
+        await self.wait_until_ready()
+
+    @tasks.loop(hours=6)
+    async def send_external_loop(self):
+        await self.send_external_summary()
+
+    @send_external_loop.before_loop
+    async def before_external(self):
         await self.wait_until_ready()
 
     async def _fetch_channel(self, channel_id: int):
@@ -209,6 +273,19 @@ class MarketBot(discord.Client):
 
         self.last_sent_at = datetime.utcnow().isoformat()
 
+    async def send_external_summary(self):
+        """Send compact all-sector summary to the external server channel."""
+        if not EXTERNAL_CHANNEL_ID:
+            return
+        try:
+            embeds = await build_external_summary_embeds()
+            channel = await self._fetch_channel(EXTERNAL_CHANNEL_ID)
+            # Discord allows max 10 embeds per message
+            await channel.send(embeds=embeds[:10])
+            logger.info(f"Sent external summary to channel {EXTERNAL_CHANNEL_ID}")
+        except Exception as e:
+            logger.error(f"Failed to send external summary: {e}")
+
 
 bot_instance: MarketBot | None = None
 
@@ -237,5 +314,12 @@ async def stop_discord_bot():
 async def send_summary_now():
     if bot_instance and not bot_instance.is_closed():
         await bot_instance.send_summary(force=True)
+    else:
+        logger.warning("Discord bot is not running")
+
+
+async def send_external_summary_now():
+    if bot_instance and not bot_instance.is_closed():
+        await bot_instance.send_external_summary()
     else:
         logger.warning("Discord bot is not running")
