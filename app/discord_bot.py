@@ -97,6 +97,30 @@ async def build_sector_buckets() -> dict[str, list[dict]]:
     return buckets
 
 
+def _format_summary_bullets(summary: str) -> str:
+    """Break a summary into bullet points by sentence."""
+    if not summary:
+        return ""
+    # Split on sentence boundaries
+    sentences = [s.strip() for s in summary.replace(". ", ".\n").split("\n") if s.strip()]
+    if len(sentences) <= 1:
+        return f"> {summary}"
+    return "\n".join(f"> \u2022 {s}" for s in sentences)
+
+
+def _format_sectors(affected_sectors_raw: str | None) -> str:
+    """Format affected sectors as inline tags."""
+    if not affected_sectors_raw:
+        return ""
+    try:
+        sectors = json.loads(affected_sectors_raw)
+    except (json.JSONDecodeError, TypeError):
+        sectors = [s.strip() for s in affected_sectors_raw.split(",") if s.strip()]
+    if not sectors:
+        return ""
+    return " ".join(f"`{s}`" for s in sectors[:6])
+
+
 def build_sector_embed(sector_name: str, sector_articles: list[dict]) -> discord.Embed:
     """Build an embed for a single sector's top articles."""
     top = sector_articles[:5]
@@ -108,15 +132,25 @@ def build_sector_embed(sector_name: str, sector_articles: list[dict]) -> discord
         level = (a.get("impact_level") or "low").upper()
         direction = a.get("market_direction", "neutral")
         arrow = DIRECTION_ARROWS.get(direction, "\u2014")
+        dir_label = direction.capitalize()
         title = a.get("title", "Untitled")
         url = a.get("archive_url") or a.get("url", "")
         source = a.get("source", "")
         summary = a.get("impact_summary", "") or ""
+        sectors_str = _format_sectors(a.get("affected_sectors"))
 
-        title_display = title[:70] + "..." if len(title) > 70 else title
+        title_display = title[:80] + "..." if len(title) > 80 else title
         link = f"[{title_display}]({url})" if url else title_display
-        summary_display = summary[:120] + "..." if len(summary) > 120 else summary
-        lines.append(f"**{i}.** {arrow} `{level} {score}` {link}\n> {summary_display}\n> _{source}_")
+        bullets = _format_summary_bullets(summary)
+
+        parts = [f"**{i}.** {arrow} `{level} {score}` \u2014 _{dir_label}_ | {link}"]
+        if bullets:
+            parts.append(bullets)
+        if sectors_str:
+            parts.append(f"> Sectors: {sectors_str}")
+        parts.append(f"> \u2014 _{source}_")
+
+        lines.append("\n".join(parts))
 
     sector_embed = discord.Embed(
         title=f"{sector_name} \u2014 Top Market Movers",
