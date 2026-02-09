@@ -14,3 +14,4 @@ discord.py==2.6.4
 python-dotenv==1.2.1
 resend==2.7.0
 aiohttp==3.11.12
+archiveis==0.0.9

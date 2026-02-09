@@ -1,5 +1,6 @@
 import logging
 import asyncio
+
 import aiohttp
 
 from app.database import get_articles_without_archive, update_archive_url
@@ -8,6 +9,24 @@ logger = logging.getLogger(__name__)
 
 WAYBACK_SAVE_URL = "https://web.archive.org/save/"
 WAYBACK_CHECK_URL = "https://archive.org/wayback/available?url="
+
+
+async def save_to_archive_is(url: str) -> str | None:
+    """Submit a URL to archive.is using the archiveis library (sync, run in executor)."""
+    try:
+        import archiveis
+        loop = asyncio.get_event_loop()
+        archive_url = await loop.run_in_executor(None, archiveis.capture, url)
+        if archive_url and "archive" in archive_url:
+            logger.info(f"archive.is saved: {url} -> {archive_url}")
+            return archive_url
+    except Exception as e:
+        err_str = str(e)
+        if "429" in err_str or "Too Many" in err_str:
+            logger.warning(f"archive.is rate limited for {url}")
+        else:
+            logger.warning(f"archive.is failed for {url}: {e}")
+    return None
 
 
 async def save_to_wayback(url: str) -> str | None:
@@ -24,7 +43,7 @@ async def save_to_wayback(url: str) -> str | None:
                     snapshot = data.get("archived_snapshots", {}).get("closest")
                     if snapshot and snapshot.get("available"):
                         archive_url = snapshot["url"]
-                        logger.info(f"Already archived: {url} -> {archive_url}")
+                        logger.info(f"Wayback cached: {url} -> {archive_url}")
                         return archive_url
 
             # Not archived yet — request a save
@@ -34,14 +53,12 @@ async def save_to_wayback(url: str) -> str | None:
                 allow_redirects=True,
             ) as resp:
                 if resp.status == 200:
-                    # The final URL after redirect is the archive URL
                     archive_url = str(resp.url)
                     if "web.archive.org" in archive_url:
-                        logger.info(f"Saved to Wayback: {url} -> {archive_url}")
+                        logger.info(f"Wayback saved: {url} -> {archive_url}")
                         return archive_url
 
-                # Fallback: construct the availability URL
-                # Sometimes save returns non-200 but still archives
+                # Verify after a short wait
                 await asyncio.sleep(2)
                 async with session.get(
                     f"{WAYBACK_CHECK_URL}{url}",
@@ -52,15 +69,26 @@ async def save_to_wayback(url: str) -> str | None:
                         snapshot = data.get("archived_snapshots", {}).get("closest")
                         if snapshot and snapshot.get("available"):
                             archive_url = snapshot["url"]
-                            logger.info(f"Saved to Wayback (verified): {url} -> {archive_url}")
+                            logger.info(f"Wayback saved (verified): {url} -> {archive_url}")
                             return archive_url
 
     except asyncio.TimeoutError:
-        logger.warning(f"Wayback save timed out for {url}")
+        logger.warning(f"Wayback timed out for {url}")
     except Exception as e:
-        logger.warning(f"Wayback save failed for {url}: {e}")
+        logger.warning(f"Wayback failed for {url}: {e}")
 
     return None
+
+
+async def save_article(url: str) -> str | None:
+    """Try archive.is first, fall back to Wayback Machine."""
+    archive_url = await save_to_archive_is(url)
+    if archive_url:
+        return archive_url
+
+    logger.info(f"archive.is failed, trying Wayback for {url}")
+    archive_url = await save_to_wayback(url)
+    return archive_url
 
 
 async def archive_pending_articles(batch_size: int = 20) -> dict:
@@ -73,14 +101,14 @@ async def archive_pending_articles(batch_size: int = 20) -> dict:
     failed = 0
 
     for article in articles:
-        archive_url = await save_to_wayback(article["url"])
+        archive_url = await save_article(article["url"])
         if archive_url:
             await update_archive_url(article["id"], archive_url)
             archived += 1
         else:
             failed += 1
-        # Rate limit: be nice to Wayback Machine
-        await asyncio.sleep(1)
+        # Rate limit: be respectful
+        await asyncio.sleep(2)
 
     logger.info(f"Archiving done: {archived} saved, {failed} failed out of {len(articles)}")
     return {"archived": archived, "failed": failed, "total": len(articles)}
