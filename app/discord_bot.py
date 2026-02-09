@@ -236,25 +236,49 @@ class MarketBot(discord.Client):
             except Exception as e:
                 logger.error(f"Failed to send {sector_name}: {e}")
 
-        # External channel — all sectors in one message
         if EXTERNAL_CHANNEL_ID:
             try:
-                embeds = [discord.Embed(
-                    title="Market Impact Scanner \u2014 6h Summary",
-                    description=(
-                        f"**{stats['high_impact']}** high | "
-                        f"**{stats['medium_impact']}** medium | "
-                        f"**{stats['low_impact']}** low"
-                    ),
+                all_high = [
+                    a for a in await _get_analyzed_pool()
+                    if (a.get("impact_level") or "").lower() == "high"
+                ]
+                all_high.sort(key=lambda a: a.get("impact_score", 0), reverse=True)
+                top = all_high[:10]
+
+                lines = []
+                for i, a in enumerate(top, 1):
+                    score = a.get("impact_score", 0)
+                    direction = a.get("market_direction", "neutral")
+                    arrow = DIRECTION_ARROWS.get(direction, "\u2014")
+                    dir_label = direction.capitalize()
+                    title = a.get("title", "Untitled")
+                    url = a.get("archive_url") or a.get("url", "")
+                    summary = a.get("impact_summary", "") or ""
+                    sectors_str = _format_sectors(a.get("affected_sectors"))
+
+                    title_display = title[:80] + "..." if len(title) > 80 else title
+                    link = f"[{title_display}]({url})" if url else title_display
+                    bullets = _format_summary_bullets(summary)
+
+                    parts = [f"**{i}.** {arrow} `HIGH {score}` \u2014 _{dir_label}_ | {link}"]
+                    if bullets:
+                        parts.append(bullets)
+                    if sectors_str:
+                        parts.append(f"> Sectors: {sectors_str}")
+                    lines.append("\n".join(parts))
+
+                embed = discord.Embed(
+                    title="Market Impact Scanner \u2014 6h High Impact Summary",
+                    description="\n\n".join(lines) if lines else "_No high-impact articles in the last 6 hours._",
                     color=0xEF5350,
                     timestamp=datetime.utcnow(),
-                )]
-                for sector_name in ["TMT", "Defensive", "Macroeconomics", "Cyclical"]:
-                    articles = buckets.get(sector_name, [])
-                    if articles:
-                        embeds.append(build_sector_embed(sector_name, articles))
+                )
+                embed.set_footer(
+                    text=f"{len(all_high)} high-impact articles | "
+                         f"{stats['medium_impact']} medium | {stats['low_impact']} low"
+                )
                 channel = await self._fetch_channel(EXTERNAL_CHANNEL_ID)
-                await channel.send(embeds=embeds[:10])
+                await channel.send(embed=embed)
             except Exception as e:
                 logger.error(f"Failed to send external summary: {e}")
 
