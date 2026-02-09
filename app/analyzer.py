@@ -8,7 +8,12 @@ from app.database import update_analysis, get_unanalyzed_articles
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODELS = [
+    os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "qwen/qwen3-32b",
+    "llama-3.1-8b-instant",
+]
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
 
@@ -54,21 +59,33 @@ Respond with valid JSON matching this schema:
 def _analyze_via_groq(title: str, summary: str) -> MarketImpactAnalysis | None:
     from groq import Groq
 
-    client = Groq(api_key=GROQ_API_KEY)
+    client = Groq(api_key=GROQ_API_KEY, max_retries=0)
     user_content = f"HEADLINE: {title}\n\nSUMMARY: {summary}" if summary else f"HEADLINE: {title}"
 
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1,
-    )
+    last_error = None
+    for model in GROQ_MODELS:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+            raw = response.choices[0].message.content
+            result = MarketImpactAnalysis.model_validate_json(raw)
+            logger.debug(f"Used model {model} for analysis")
+            return result
+        except Exception as e:
+            last_error = e
+            if "rate_limit" in str(e).lower() or "429" in str(e):
+                logger.warning(f"Rate limited on {model}, trying next model...")
+                continue
+            raise  # Non-rate-limit errors should propagate
 
-    raw = response.choices[0].message.content
-    return MarketImpactAnalysis.model_validate_json(raw)
+    raise last_error  # All models exhausted
 
 
 def _analyze_via_ollama(title: str, summary: str) -> MarketImpactAnalysis | None:
