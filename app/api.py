@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 from app.database import get_articles, get_article_count, get_sources, get_market_summary
 from app.feeds import fetch_all_feeds, RSS_FEEDS
 from app.analyzer import analyze_pending_articles, check_ollama_available
-from app.discord_bot import send_summary_now, send_external_summary_now
+from app.discord_bot import send_summary_now
 from app.email_summary import send_email_summary, send_daily_digest
 from app.archiver import archive_pending_articles
 
@@ -71,13 +71,6 @@ async def trigger_analysis(
 @router.post("/discord-summary")
 async def trigger_discord_summary():
     await send_summary_now()
-    return {"status": "sent"}
-
-
-@router.post("/external-summary")
-async def trigger_external_summary():
-    """Manually trigger the external server Discord summary."""
-    await send_external_summary_now()
     return {"status": "sent"}
 
 
