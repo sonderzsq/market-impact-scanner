@@ -287,3 +287,55 @@ async def send_summary_now():
         await bot_instance.send_update(force=True)
     else:
         logger.warning("Discord bot is not running")
+
+
+async def test_external_channel() -> dict:
+    result = {
+        "external_channel_id": EXTERNAL_CHANNEL_ID,
+        "bot_running": False,
+        "bot_user": None,
+        "channel_found": False,
+        "channel_name": None,
+        "guild_name": None,
+        "send_success": False,
+        "error": None,
+    }
+
+    if not bot_instance or bot_instance.is_closed():
+        result["error"] = "Bot is not running or is closed"
+        return result
+
+    result["bot_running"] = True
+    result["bot_user"] = str(bot_instance.user)
+
+    if not EXTERNAL_CHANNEL_ID:
+        result["error"] = "DISCORD_CHANNEL_EXTERNAL env var not set or is 0"
+        return result
+
+    result["guilds"] = [
+        {"id": g.id, "name": g.name, "member_count": g.member_count}
+        for g in bot_instance.guilds
+    ]
+
+    try:
+        channel = await bot_instance._fetch_channel(EXTERNAL_CHANNEL_ID)
+        result["channel_found"] = True
+        result["channel_name"] = getattr(channel, "name", "unknown")
+        result["guild_name"] = getattr(getattr(channel, "guild", None), "name", "unknown")
+    except Exception as e:
+        result["error"] = f"Failed to fetch channel: {type(e).__name__}: {e}"
+        return result
+
+    try:
+        test_embed = discord.Embed(
+            title="External Channel Test",
+            description="If you see this, the bot can send to this channel.",
+            color=0x00FF00,
+            timestamp=datetime.utcnow(),
+        )
+        await channel.send(embed=test_embed)
+        result["send_success"] = True
+    except Exception as e:
+        result["error"] = f"Failed to send message: {type(e).__name__}: {e}"
+
+    return result

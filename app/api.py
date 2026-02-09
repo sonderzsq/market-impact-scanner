@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 from app.database import get_articles, get_article_count, get_sources, get_market_summary
 from app.feeds import fetch_all_feeds, RSS_FEEDS
 from app.analyzer import analyze_pending_articles, check_ollama_available
-from app.discord_bot import send_summary_now
+from app.discord_bot import send_summary_now, test_external_channel
 from app.email_summary import send_email_summary, send_daily_digest
 from app.archiver import archive_pending_articles
 
@@ -100,6 +100,11 @@ async def trigger_archive(
 async def market_summary():
     """Overall market moves, sentiment, and key drivers."""
     return await get_market_summary()
+
+
+@router.post("/test-external-channel")
+async def test_external():
+    return await test_external_channel()
 
 
 @router.api_route("/health", methods=["GET", "HEAD"])
