@@ -6,6 +6,7 @@ from app.feeds import fetch_all_feeds, RSS_FEEDS
 from app.analyzer import analyze_pending_articles, check_ollama_available
 from app.discord_bot import send_summary_now, send_external_summary_now
 from app.email_summary import send_email_summary, send_daily_digest
+from app.archiver import archive_pending_articles
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -91,6 +92,15 @@ async def trigger_daily_digest():
     """Manually trigger the daily 24-hour digest email."""
     result = await send_daily_digest()
     return result
+
+
+@router.post("/archive")
+async def trigger_archive(
+    batch_size: int = Query(20, ge=1, le=100, description="Articles to archive per batch"),
+):
+    """Save articles to Wayback Machine."""
+    stats = await archive_pending_articles(batch_size=batch_size)
+    return stats
 
 
 @router.get("/market-summary")

@@ -27,7 +27,8 @@ async def init_db():
                 impact_summary TEXT,
                 affected_sectors TEXT,
                 market_direction TEXT,
-                analyzed_at TEXT
+                analyzed_at TEXT,
+                archive_url TEXT
             )
         """)
         await db.execute("""
@@ -42,6 +43,11 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_articles_url
             ON articles(url)
         """)
+        # Migration: add archive_url column to existing databases
+        try:
+            await db.execute("ALTER TABLE articles ADD COLUMN archive_url TEXT")
+        except Exception:
+            pass  # Column already exists
         await db.commit()
 
 
@@ -67,6 +73,29 @@ async def insert_article(
             return cursor.lastrowid
         except aiosqlite.IntegrityError:
             return None
+
+
+async def update_archive_url(article_id: int, archive_url: str):
+    """Store the Wayback Machine archive URL for an article."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE articles SET archive_url = ? WHERE id = ?",
+            (archive_url, article_id),
+        )
+        await db.commit()
+
+
+async def get_articles_without_archive(limit: int = 50) -> list[dict]:
+    """Get articles that don't have an archive URL yet."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await db.execute_fetchall(
+            """SELECT id, url FROM articles
+               WHERE archive_url IS NULL AND url IS NOT NULL
+               ORDER BY fetched_at DESC LIMIT ?""",
+            (limit,),
+        )
+        return [dict(row) for row in rows]
 
 
 async def update_analysis(

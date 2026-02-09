@@ -6,6 +6,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.feeds import fetch_all_feeds
 from app.analyzer import analyze_pending_articles, check_ollama_available
 from app.email_summary import send_email_summary, send_daily_digest
+from app.archiver import archive_pending_articles
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,16 @@ async def scheduled_email():
         logger.error(f"Scheduled email failed: {e}")
 
 
+async def scheduled_archive():
+    """Periodic archiving job — saves articles to Wayback Machine."""
+    logger.info("Scheduled archiving starting...")
+    try:
+        stats = await archive_pending_articles(batch_size=10)
+        logger.info(f"Scheduled archiving done: {stats}")
+    except Exception as e:
+        logger.error(f"Scheduled archiving failed: {e}")
+
+
 async def scheduled_daily_digest():
     """Daily 10am EST digest — past 24 hours summary."""
     logger.info("Scheduled daily digest starting...")
@@ -80,6 +91,14 @@ def start_scheduler(
         trigger=IntervalTrigger(hours=email_interval_hours),
         id="email_summary",
         name="Send email summary",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        scheduled_archive,
+        trigger=IntervalTrigger(minutes=20),
+        id="article_archive",
+        name="Archive articles to Wayback Machine",
         replace_existing=True,
     )
 

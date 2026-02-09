@@ -116,7 +116,7 @@ def build_sector_embed(sector_name: str, sector_articles: list[dict]) -> discord
         direction = a.get("market_direction", "neutral")
         arrow = DIRECTION_ARROWS.get(direction, "\u2014")
         title = a.get("title", "Untitled")
-        url = a.get("url", "")
+        url = a.get("archive_url") or a.get("url", "")
         source = a.get("source", "")
 
         title_display = title[:80] + "..." if len(title) > 80 else title
@@ -210,7 +210,7 @@ async def build_external_summary_embeds() -> list[discord.Embed]:
             direction = a.get("market_direction", "neutral")
             arrow = DIRECTION_ARROWS.get(direction, "\u2014")
             title = a.get("title", "Untitled")
-            url = a.get("url", "")
+            url = a.get("archive_url") or a.get("url", "")
             summary = a.get("impact_summary", "") or ""
 
             title_display = title[:70] + "..." if len(title) > 70 else title

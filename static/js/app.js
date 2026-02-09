@@ -532,7 +532,17 @@ function openModal(article) {
         sectorsSection.style.display = 'none';
     }
 
-    document.getElementById('modal-link').href = article.url || '#';
+    const modalLink = document.getElementById('modal-link');
+    const archiveLink = document.getElementById('modal-archive-link');
+    if (article.archive_url) {
+        archiveLink.href = article.archive_url;
+        archiveLink.style.display = '';
+        modalLink.textContent = 'Original Article';
+    } else {
+        archiveLink.style.display = 'none';
+        modalLink.textContent = 'Read Full Article';
+    }
+    modalLink.href = article.url || '#';
 
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
