@@ -152,9 +152,11 @@ async def send_email_summary() -> dict:
         logger.info("No analyzed articles, skipping email summary")
         return {"status": "skipped", "reason": "no data"}
 
-    overall = data.get("overall_direction", "neutral").upper()
-    arrow = DIRECTION_ARROWS.get(data.get("overall_direction", "neutral"), "—")
-    subject = f"{arrow} Market {overall} — {data['total_analyzed']} articles analyzed | MIS Summary"
+    overall = data.get("overall_direction", "neutral")
+    arrow = DIRECTION_ARROWS.get(overall, "—")
+    top_drivers = data.get("top_drivers", [])
+    headline = top_drivers[0].get("title", "Market Update") if top_drivers else "Market Update"
+    subject = f"{arrow} {headline}"
 
     html = _build_email_html(data)
 
@@ -187,10 +189,11 @@ async def send_daily_digest() -> dict:
         logger.info("No articles in last 24h, skipping daily digest")
         return {"status": "skipped", "reason": "no data in last 24h"}
 
-    overall = data.get("overall_direction", "neutral").upper()
-    arrow = DIRECTION_ARROWS.get(data.get("overall_direction", "neutral"), "—")
-    today = datetime.utcnow().strftime("%b %d, %Y")
-    subject = f"{arrow} Daily Digest — Market {overall} | {data['total_analyzed']} articles | {today}"
+    overall = data.get("overall_direction", "neutral")
+    arrow = DIRECTION_ARROWS.get(overall, "—")
+    top_drivers = data.get("top_drivers", [])
+    headline = top_drivers[0].get("title", "Daily Digest") if top_drivers else "Daily Digest"
+    subject = f"{arrow} {headline}"
 
     html = _build_email_html(data, title="Daily Digest — Past 24 Hours")
 
